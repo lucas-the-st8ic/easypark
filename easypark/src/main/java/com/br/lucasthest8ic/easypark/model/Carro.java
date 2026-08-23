@@ -3,7 +3,7 @@ package com.br.lucasthest8ic.easypark.model;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name="Carros")
+@Table(name="carros")
 public class Carro {
 
     @Id
