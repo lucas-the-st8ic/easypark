@@ -27,9 +27,7 @@ public class Carro {
     )
     private Integer idCarro;
 
-    @Column(name = "placa",
-            nullable = false,
-            unique = true, length = 10)
+    @Column(name = "placa", nullable = false, unique = true, length = 10)
     private String placa;
 
     @Column(name = "modelo", length = 50)
