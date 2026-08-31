@@ -34,6 +34,7 @@ public class Vaga {
     private Estacionamento estacionamento;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private TipoVaga tipoVaga;
 
 }
