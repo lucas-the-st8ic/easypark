@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 @Entity
 @Table(name="estadias")
@@ -41,7 +42,7 @@ public class Estadia {
     private LocalDateTime horarioEntrada;
     
     @Column(name = "valor", precision = 10, scale = 2)
-    private Double valor;
+    private BigDecimal valor;
 
     @Column(name = "horario_saida")
     private LocalDateTime horarioSaida;
