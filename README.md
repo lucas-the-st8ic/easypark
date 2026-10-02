@@ -2,155 +2,208 @@
 
 API REST para gerenciamento de estacionamentos, vagas e estadias de veículos, desenvolvida em Java com Spring Boot — evolução de um sistema originalmente feito em Portugol.
 
-> 📌 Este README documenta o **progresso real do projeto**: decisões de modelagem já tomadas, o que já foi implementado e o roteiro do que falta. Serve como guia de continuidade para quem está aprendendo Spring Boot, MVC e JPA na prática.
+> ⚠️ **Projeto em fase de estruturação e aprendizado.**
+> Este é um projeto de estudos focado em Spring Boot, JPA e arquitetura em camadas. As decisões aqui documentadas refletem o processo de aprendizado na prática — a camada de persistência/banco está concluída, mas **ainda não há Service nem Controller implementados**, portanto o sistema ainda não está funcional de ponta a ponta. O objetivo é consolidar a modelagem e a persistência antes de avançar para as regras de negócio.
 
 ---
 
 ## 📖 Sobre o projeto
 
-O EasyPark gerencia **múltiplos estacionamentos** (pátios), cada um com vagas comuns, de idoso e PCD. O sistema deve:
+O **EasyPark** gerencia múltiplos estacionamentos (pátios), cada um com vagas comuns, de idoso e PCD. O sistema foi projetado para:
 
-- Cadastrar estacionamentos, informando a quantidade de vagas comuns, de idoso e PCD
-- Registrar a entrada e saída de veículos automaticamente (horário do servidor, não informado pelo cliente)
-- Impedir estacionar em vaga de idoso/PCD sem elegibilidade
-- Impedir a mesma placa estacionada duas vezes simultaneamente
-- Calcular o valor cobrado com base no tempo de permanência
-- Listar veículos estacionados, histórico e ocupação por estacionamento
+- Cadastrar estacionamentos informando a quantidade de vagas por categoria (comuns, idoso e PCD).
+- Registrar a entrada e saída de veículos automaticamente com horário gerado pelo servidor (`LocalDateTime.now()`).
+- Impedir estacionamento em vagas reservadas (idoso/PCD) para veículos não elegíveis.
+- Impedir que a mesma placa esteja estacionada em duas estadias ativas simultaneamente.
+- Calcular o valor cobrado com base no tempo de permanência no momento da saída.
+- Consultar vagas livres/ocupadas, veículos atualmente estacionados e histórico de estadias.
 
 ---
 
-## 🛠️ Tecnologias utilizadas
+## 🛠️ Tecnologias e Stack
 
-| Tecnologia | Uso |
+| Tecnologia | Função / Uso |
 |---|---|
-| Java 21 | Linguagem |
-| Spring Boot 4.1.1 | Framework |
-| Spring Data JPA | Persistência |
-| PostgreSQL | Banco de dados |
-| Lombok | Redução de boilerplate |
-| Maven | Build e dependências |
+| **Java 25** | Linguagem de programação |
+| **Spring Boot 4.1.1** | Framework base da aplicação |
+| **Spring Data JPA** | Abstração de persistência de dados |
+| **Hibernate 7** | ORM / Provedor JPA |
+| **PostgreSQL** | Banco de dados relacional |
+| **Lombok** | Redução de código boilerplate (`@Getter`, `@Setter`, etc.) |
+| **Maven** | Gerenciador de dependências e build |
 
 ---
 
-## 🏗️ Arquitetura (MVC em camadas)
+## 📊 Status geral do projeto
+
+| Camada / Componente | Status | Detalhes |
+|---|---|---|
+| **Modelagem (Entidades)** | ✅ Concluída | `Carro`, `Estacionamento`, `Vaga`, `Estadia` criadas |
+| **JPA (Anotações / Relacionamentos)** | ✅ Concluída | `@OneToMany`, `@ManyToOne`, `@SequenceGenerator` aplicados |
+| **Banco de Dados (PostgreSQL)** | ✅ Conectado | Tabelas criadas e atualizadas automaticamente via Hibernate |
+| **Repositories** | ✅ Concluída (4/4) | Spring Data JPA interfaces com Query Methods criadas |
+| **Dependência Web (Spring MVC)** | ⬜ Pendente | Adicionar starter web no `pom.xml` |
+| **DTOs** | ⬜ Não iniciada | Estruturação de DTOs de entrada e saída |
+| **Service (Regras de Negócio)** | 🟡 Pasta criada | Lógica de entrada/saída, cálculo de valor e exceções pendentes |
+| **Controller (Endpoints REST)** | ⬜ Não iniciada | Exposição das rotas HTTP |
+| **Validações (Bean Validation)** | ⬜ Não iniciada | Anotações `@NotBlank`, `@Pattern`, `@Size` |
+| **Tratamento Global de Exceções** | ⬜ Não iniciada | `@RestControllerAdvice` e `@ExceptionHandler` |
+| **Testes Unitários / Integração** | ⬜ Não iniciada | Testes com JUnit 5 / Mockito |
+
+---
+
+## 🏗️ Arquitetura (MVC em Camadas)
 
 ```
 com.br.lucasthest8ic.easypark/
-├── model/          ✅ criado (Carro, Vaga, Estacionamento, Estadia)
-├── enums/          ✅ criado (TipoVaga)
-├── repository/     ⬜ não criado ainda
-├── service/        🟡 pasta criada, vazia
-├── controller/     ⬜ não criado ainda
-└── dto/            ⬜ não criado ainda
+├── model/           ✅ completo (Carro, Vaga, Estacionamento, Estadia)
+├── enums/           ✅ completo (TipoVaga)
+├── repository/      ✅ completo (CarroRepository, EstacionamentoRepository, VagaRepository, EstadiaRepository)
+├── service/         🟡 pasta criada (vazia — aguardando regras de negócio)
+├── controller/      ⬜ não criado ainda
+└── dto/             ⬜ não criado ainda
 ```
 
 ---
 
-## 🧠 Decisões de modelagem já fechadas
+## 🧠 Decisões de modelagem e por quê
 
-Estas decisões foram pensadas com calma antes de codar — vale manter aqui como registro do *porquê*, não só do *o quê*:
+A modelagem do domínio foi construída questionando continuamente se cada informação era um **dado de origem** (precisa ser armazenado na tabela) ou **dado derivado** (pode ser calculated a partir de outros dados já existentes):
 
-- **`Vaga` não guarda mais o carro atual nem um campo `vagaLivre`.** Ambos eram dados deriváveis (existe uma `Estadia` ativa? → ocupada) e foram removidos para evitar dessincronização.
-- **`Estadia` é a entidade de associação** entre `Carro` e `Vaga`, carregando `horarioEntrada`, `horarioSaida` e `valor`. Não existe campo booleano de "ativo" — isso é deduzido por `horarioSaida == null`.
-- **Horários são sempre gerados pelo servidor** (`LocalDateTime.now()`), nunca informados pelo cliente — elimina a necessidade de validar "entrada até 24h no passado".
-- **Regra de negócio confirmada:** não permitir horário de saída anterior ao horário de entrada.
-- **`Carro` é reaproveitado**, não duplicado: ao chegar uma placa já existente, busca-se o registro (por isso `placa` é `unique`), em vez de criar um novo.
-- **`totalVagas` e `totalVagasIdoso` não existem como campos** em `Estacionamento` — são deriváveis de `vagas.size()` e da contagem por `tipoVaga`. A quantidade informada no cadastro (ex: "50 comuns, 10 idoso, 5 PCD") será tratada via **DTO**, usada só para gerar os objetos `Vaga` no momento da criação.
-- **Tipos de ID definidos por volume de crescimento:**
-  - `Carro`, `Vaga`, `Estacionamento` → `Integer` (crescimento lento/catálogo)
-  - `Estadia` → `Long` (cresce a cada entrada, para sempre)
-- **`TipoVaga` é um enum simples** (`COMUM`, `IDOSO`, `PCD`), sem construtor — vive no pacote `enums` (não pôde ser `enum` no singular por ser palavra reservada do Java).
-- **Estratégia de geração de ID: `GenerationType.SEQUENCE`**, com `@SequenceGenerator` explícito por entidade (nome, sequência, `initialValue`, `allocationSize`) — escolhida por ter melhor suporte a *batch insert* no PostgreSQL, relevante para o crescimento de `Estadia`.
+### 1. Entidades
+- **`Carro` — Reaproveitamento pela placa:** O veículo não é duplicado a cada nova parada. Ao chegar uma placa já existente, busca-se o registro base (`unique = true`). A mesma placa nunca gera um novo registro de `Carro`, apenas uma nova `Estadia`.
+- **`Estacionamento` — Pátio enxuto:** Não guarda `totalVagas` nem `totalVagasIdoso` como colunas no banco — ambos são deriváveis da contagem da lista de `vagas` associadas.
+- **`Vaga` — Sem redundâncias:** Não existe campo booleano `vagaLivre` ou `carroAtual`. O estado "livre/ocupada" é deduzido pela existência (ou ausência) de uma `Estadia` ativa ligada àquela vaga.
+- **`Estadia` — Tabela de associação e histórico:** É a entidade central das regras de negócio. Relaciona `Carro` e `Vaga`, guardando `horarioEntrada`, `horarioSaida` e `valor`. O estado de uma estadia ser **ativa** é definido puramente por `horarioSaida == null`.
 
----
+### 2. IDs e Estratégias de Persistência
+- **Estratégia `GenerationType.SEQUENCE`:** Escolha consciente com `@SequenceGenerator` explícito em todas as entidades. Apresenta performance superior e suporte nativo a *batch inserts* no PostgreSQL (essencial ao criar um pátio com dezenas de vagas de uma só vez).
+- **Tipos numéricos baseados em volume:**
+  - `Carro`, `Vaga`, `Estacionamento` → `Integer` (crescimento lento / dados cadastrais).
+  - `Estadia` → `Long` (cresce continuamente a cada entrada, para sempre).
+- **`allocationSize = 1`:** Adotado temporariamente em todas as sequências por simplicidade inicial durante o aprendizado.
 
-## ✅ O que já foi feito
-
-### `Carro` — ✅ completo como entidade JPA
-- `@Entity`, `@Table(name = "carros")`
-- `@Id` + `@SequenceGenerator` + `@GeneratedValue(strategy = SEQUENCE)` configurados explicitamente
-- `@Column` com `unique = true` em `placa` (suporta a regra de reaproveitar carro)
-- Lombok aplicado: `@Getter`, `@Setter`, `@NoArgsConstructor`, `@AllArgsConstructor`
-
-### `TipoVaga` (enum) — ✅ completo
-- Enum simples, sem construtor: `COMUM`, `IDOSO`, `PCD`
-
-### `Vaga` — 🟡 parcial
-- Campos definidos: `idVaga`, `estacionamento`, `tipoVaga`
-- `@Enumerated(EnumType.STRING)` já aplicado no campo `tipoVaga`
-- **Ainda não é `@Entity`** — falta anotar como entidade e configurar o relacionamento com `Estacionamento`
-
-### `Estacionamento` — 🟡 parcial
-- Campos definidos: `idEstacionamento`, `nome`, `vagas`
-- **Ainda não é `@Entity`** — falta anotar e configurar o lado `@OneToMany` da relação com `Vaga`
-
-### `Estadia` — 🟡 parcial
-- Campos definidos: `idEstadia`, `vaga`, `carro`, `valor`, `horarioEntrada`, `horarioSaida`
-- **Ainda não é `@Entity`** — falta anotar e configurar os dois `@ManyToOne`
-
-### Estrutura de pastas
-- `model` e `enums` criados e em uso
-- `service` criada, mas ainda vazia
+### 3. Regras de Tempo e Validações
+- **Horário gerado pelo Servidor:** `horarioEntrada` utiliza `LocalDateTime.now()` automático no backend, impedindo que o cliente envie datas arbitrárias e dispensando validações complexas de passado/futuro.
+- **Validação de saída:** Não será permitido um `horarioSaida` anterior ao `horarioEntrada`.
+- **`TipoVaga` como Enum:** Enum simples (`COMUM`, `IDOSO`, `PCD`), persistido no banco como `EnumType.STRING`.
 
 ---
 
-## 🚧 O que falta fazer (roteiro sequencial)
+## 🗄️️ Detalhamento do Modelo de Dados
 
-### Fase 1 — Fechar a camada JPA
-- [ ] Anotar `Estacionamento` e `Vaga` juntos (relação bidirecional `@OneToMany` / `@ManyToOne` + `mappedBy`)
-- [ ] Decidir e aplicar `@SequenceGenerator` em `Estacionamento`, `Vaga` e `Estadia` (mesmo padrão usado em `Carro`)
-- [ ] Anotar `Estadia` (`@ManyToOne` para `Vaga` e para `Carro`)
-- [ ] Aplicar Lombok (`@Getter`/`@Setter`/construtores) nas 3 entidades restantes
+### `Carro` (`carros`)
+| Campo | Tipo JPA / Java | Configuração JPA / Observação |
+|---|---|---|
+| `idCarro` | `Integer` | `@Id`, Sequence |
+| `placa` | `String` | `@Column(unique = true, length = 10)` |
+| `modelo` | `String` | `@Column(length = 50)` |
+| `cor` | `String` | `@Column(length = 30)` |
+| `elegivelVagaIdoso` | `boolean` | Dado de origem (não derivável) |
 
-### Fase 2 — Conectar o banco
-- [ ] Configurar `application.properties` com URL, usuário e senha do PostgreSQL
-- [ ] Subir a aplicação e validar que o Hibernate cria as 4 tabelas sem erro
+### `Estacionamento` (`estacionamentos`)
+| Campo | Tipo JPA / Java | Configuração JPA / Observação |
+|---|---|---|
+| `idEstacionamento` | `Integer` | `@Id`, Sequence |
+| `nome` | `String` | `@Column(unique = true)` (busca case-insensitive no repo) |
+| `vagas` | `List<Vaga>` | `@OneToMany(mappedBy = "estacionamento", fetch = LAZY, cascade = PERSIST)` |
 
-### Fase 3 — Camada de dados
-- [ ] Criar pacote `repository`
-- [ ] Criar `CarroRepository` (`JpaRepository`), incluindo busca por placa (`findByPlaca`/`existsByPlaca`)
-- [ ] Criar `EstacionamentoRepository`, `VagaRepository`, `EstadiaRepository`
+### `Vaga` (`vagas`)
+| Campo | Tipo JPA / Java | Configuração JPA / Observação |
+|---|---|---|
+| `idVaga` | `Integer` | `@Id`, Sequence |
+| `estacionamento` | `Estacionamento` | `@ManyToOne(fetch = EAGER)`, Lado dono da FK |
+| `tipoVaga` | `TipoVaga` | `@Enumerated(EnumType.STRING)` (`COMUM`, `IDOSO`, `PCD`) |
 
-### Fase 4 — DTOs
-- [ ] Criar pacote `dto`
-- [ ] DTO de cadastro de `Estacionamento` (nome + quantidade de vagas comuns/idoso/PCD — não persiste esses números, só usa para gerar as `Vaga`)
-- [ ] DTOs de request/response para `Carro`
-
-### Fase 5 — Regras de negócio (Service)
-- [ ] Criar `Estacionamento` a partir do DTO, gerando automaticamente as `Vaga` correspondentes
-- [ ] Regra: elegibilidade do carro para vaga idoso/PCD
-- [ ] Regra: impedir mesma placa estacionada duas vezes ao mesmo tempo
-- [ ] Regra: impedir ultrapassar o limite de vagas
-- [ ] Regra: registrar entrada com `LocalDateTime.now()` automático
-- [ ] Regra: calcular valor na saída, por faixa de tempo
-- [ ] Regra: impedir horário de saída anterior ao de entrada
-- [ ] Validação de placa via regex (formato antigo + Mercosul), aplicada no DTO com `@Pattern`
-
-### Fase 6 — Controller (Endpoints)
-- [ ] CRUD de `Estacionamento` (incluindo cadastro com quantidade de vagas)
-- [ ] CRUD de `Carro`
-- [ ] `POST /estacionamentos/{id}/entrada` — registrar entrada
-- [ ] `PATCH /estacionamentos/{id}/saida` — registrar saída + cálculo de valor
-- [ ] `GET /estacionamentos/{id}/vagas/livres` e `/ocupadas`
-- [ ] `GET /estacionamentos/{id}/veiculos-estacionados` — lista de carros e vagas atuais
-- [ ] `GET /estacionamentos/{id}/historico` — histórico de estadias
-
-### Fase 7 — Tratamento de exceções
-- [ ] `@ControllerAdvice` + `@ExceptionHandler` para os erros de regra de negócio (vaga ocupada, placa duplicada, estacionamento lotado, veículo não encontrado)
-
-### Fase 8 — Melhorias futuras
-- [ ] Swagger/OpenAPI
-- [ ] Paginação e filtros (por placa, por data)
-- [ ] Testes unitários e de integração
-- [ ] Docker Compose para o PostgreSQL
-- [ ] Spring Security + JWT (login de funcionários)
+### `Estadia` (`estadias`)
+| Campo | Tipo JPA / Java | Configuração JPA / Observação |
+|---|---|---|
+| `idEstadia` | `Long` | `@Id`, Sequence (única com `Long`) |
+| `vaga` | `Vaga` | `@ManyToOne` |
+| `carro` | `Carro` | `@ManyToOne` |
+| `horarioEntrada` | `LocalDateTime` | `@Column(nullable = false)` |
+| `horarioSaida` | `LocalDateTime` | `@Column(nullable = true)` — `null` indica estadia ativa |
+| `valor` | `BigDecimal` | `@Column(precision = 10, scale = 2)` |
 
 ---
 
-## 🔎 Pendência técnica em aberto
+## 📦 Camada de Dados (Repositories)
 
-- Decidir se `Estacionamento`/`Vaga`/`Estadia` vão seguir exatamente o mesmo padrão de `@SequenceGenerator` já validado em `Carro`, ou se cada uma terá `allocationSize` diferente pensando no volume de crescimento (ex: `Estadia` pode se beneficiar de um `allocationSize` maior por crescer continuamente).
+Os 4 repositories foram criados estendendo `JpaRepository` e utilizam o padrão de **Query Methods** do Spring Data:
+
+```java
+// CarroRepository
+Optional<Carro> findByPlaca(String placa);
+boolean existsByPlaca(String placa);
+
+// EstacionamentoRepository
+Optional<Estacionamento> findByNomeIgnoreCase(String nome);
+boolean existsByNomeIgnoreCase(String nome);
+
+// EstadiaRepository
+boolean existsByCarro_PlacaAndHorarioSaidaIsNull(String carroPlaca);
+Optional<Estadia> findByCarro_PlacaAndHorarioSaidaIsNull(String carroPlaca);
+
+// VagaRepository
+List<Vaga> findByEstacionamento_IdEstacionamento(Integer idEstacionamento, Pageable pageable);
+List<Vaga> findByEstacionamento_IdEstacionamentoAndTipoVaga(Integer idEstacionamento, TipoVaga tipoVaga, Pageable pageable);
+```
 
 ---
 
-*Documento gerado a partir do progresso real do projeto — atualize conforme cada fase for concluída.*
+## 🚧 O que falta fazer (Roteiro Sequencial)
+
+### Fase 1 — Dependências e Setup Web
+- [ ] Adicionar a dependência do Spring MVC (`spring-boot-starter-web`) ao `pom.xml`.
+
+### Fase 2 — DTOs (Data Transfer Objects)
+- [ ] Criar pacote `dto`.
+- [ ] DTO de cadastro de `Estacionamento` (recebe o nome do pátio e a quantidade desejada de vagas comuns/idoso/PCD para geração automática no Service).
+- [ ] DTOs de requisição e resposta para `Carro`, `Vaga` e `Estadia`.
+
+### Fase 3 — Regras de Negócio (Service)
+- [ ] Criar `EstacionamentoService`: criar o pátio e instanciar automaticamente a lista de objetos `Vaga` com base no DTO.
+- [ ] Criar `EstadiaService` e implementar as regras:
+  - Validar elegibilidade do carro para vaga de idoso/PCD.
+  - Impedir que um veículo com estadia ativa (`horarioSaida == null`) entre novamente.
+  - Impedir entrada se o estacionamento estiver com todas as vagas ocupadas.
+  - Registrar entrada com `LocalDateTime.now()` automático.
+  - Registrar saída e calcular a cobrança com base em faixas de tempo (até 1h, até 2h, até 4h, acima de 4h).
+  - Validar e impedir `horarioSaida` anterior ao `horarioEntrada`.
+- [ ] Escrever Query JPQL customizada (`@Query`) para buscar vagas livres por tipo em um determinado pátio usando `NOT EXISTS`.
+
+### Fase 4 — Controllers (Endpoints REST)
+- [ ] CRUD de `Estacionamento` e `Carro`.
+- [ ] `POST /estacionamentos/{id}/entrada` — Registrar entrada de veículo.
+- [ ] `PATCH /estacionamentos/{id}/saida` — Registrar saída e calcular valor cobrado.
+- [ ] `GET /estacionamentos/{id}/vagas/livres` e `/ocupadas`.
+- [ ] `GET /estacionamentos/{id}/veiculos-estacionados` — Listagem de carros no pátio no momento.
+- [ ] `GET /estacionamentos/{id}/historico` — Histórico completo de estadias.
+
+### Fase 5 — Validações e Tratamento de Exceções
+- [ ] Aplicar Bean Validation (`@NotBlank`, `@Size`, `@Pattern` para placas no padrão antigo e Mercosul) nos DTOs.
+- [ ] Criar exceções customizadas de negócio (ex: `VagaOcupadaException`, `VeiculoNaoElegivelException`, `EstadiaAtivaExistenteException`).
+- [ ] Configurar `@RestControllerAdvice` e `@ExceptionHandler` para padronizar as respostas de erro da API HTTP.
+
+### Fase 6 — Melhorias e Evoluções Futuras
+- [ ] Documentação da API via Swagger / OpenAPI (`springdoc-openapi`).
+- [ ] Ajustar `allocationSize` dos `@SequenceGenerator` para otimizar os lotes de escrita das tabelas `Vaga` e `Estadia`.
+- [ ] Docker / Docker Compose para subir o container PostgreSQL sem dependência do ambiente local.
+- [ ] Spring Security + JWT para autenticação de operadores do estacionamento.
+- [ ] Testes unitários e de integração com JUnit 5, Mockito e Testcontainers.
+
+---
+
+## ⚙️ Configuração do Ambiente Local
+
+- **Banco de Dados:** PostgreSQL (banco `easy_park_db`).
+- **Variáveis de Ambiente:** Configure as seguintes variáveis na sua IDE / Run Configuration para se conectar ao banco local:
+  - `DB_HOST` (ex: `localhost:5432`)
+  - `DB_NAME` (ex: `easy_park_db`)
+  - `DB_USER` (ex: `postgres`)
+  - `DB_PASSWORD` (ex: `sua_senha`)
+- **DDL Hibernate:** Configurado como `spring.jpa.hibernate.ddl-auto=update`, garantindo que o esquema e as sequências do banco sejam criados/atualizados automaticamente no start da aplicação.
+
+---
+
+*Documento mantido e atualizado de acordo com o progresso real do projeto EasyPark.*
