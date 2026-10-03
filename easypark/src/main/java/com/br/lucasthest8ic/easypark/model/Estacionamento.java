@@ -28,7 +28,7 @@ public class Estacionamento {
     )
     private Integer idEstacionamento;
 
-    @Column(name = "estacionamento", nullable = false,
+    @Column(name = "nome_estacionamento", nullable = false,
             unique = true)
     private String nome;
 
