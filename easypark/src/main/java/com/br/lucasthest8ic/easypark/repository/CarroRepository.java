@@ -11,5 +11,4 @@ public interface CarroRepository extends JpaRepository<Carro, Integer> {
 
     boolean existsByPlaca(String placa);
 
-
 }

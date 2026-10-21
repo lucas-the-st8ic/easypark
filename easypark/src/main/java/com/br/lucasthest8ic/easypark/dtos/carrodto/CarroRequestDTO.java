@@ -1,4 +1,7 @@
 package com.br.lucasthest8ic.easypark.dtos.carrodto;
 
-public class CarroRequestDTO {
+public record CarroRequestDTO(String placa,
+                              String modelo,
+                              String cor,
+                              boolean elegivelVagaIdoso) {
 }
