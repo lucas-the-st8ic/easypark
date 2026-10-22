@@ -1,6 +1,8 @@
 package com.br.lucasthest8ic.easypark.model;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -27,6 +29,12 @@ public class Carro {
     )
     private Integer idCarro;
 
+
+    @NotBlank(message = "A placa não pode ser vazia")
+    @Pattern(
+            regexp = "^[A-Z]{3}-?([0-9]{4}|[0-9][A-Z][0-9]{2})$",
+            message = "A placa informada é inválida. \nInforme uma placa no padrão antigo (ex: ABC-1234) ou \nMercosul (ex: ABC1D23) sem caracteres extras."
+    )
     @Column(name = "placa", nullable = false, unique = true, length = 10)
     private String placa;
 
@@ -40,4 +48,12 @@ public class Carro {
             nullable = false)
     private boolean elegivelVagaIdoso = false;
 
+
+    @PrePersist
+    @PreUpdate
+    public void padronizarPlaca() {
+        if (this.placa != null) {
+            this.placa = this.placa.toUpperCase().replace("-", "").trim();
+        }
+    }
 }
