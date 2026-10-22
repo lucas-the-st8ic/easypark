@@ -52,7 +52,7 @@ public class CarroService {
     private CarroDTO toDTO(Carro carro) {
         return new CarroDTO(carro.getPlaca(),
                 carro.getModelo(),
-                carro.getCor(), carro.isElegivelVagaIdoso());
+                carro.getCor(), carro.getElegivelVagaIdoso());
     }
 
     private String normalizePlaca(String placa) {

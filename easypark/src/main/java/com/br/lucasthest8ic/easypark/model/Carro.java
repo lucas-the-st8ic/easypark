@@ -33,11 +33,12 @@ public class Carro {
     @NotBlank(message = "A placa não pode ser vazia")
     @Pattern(
             regexp = "^[A-Z]{3}-?([0-9]{4}|[0-9][A-Z][0-9]{2})$",
-            message = "A placa informada é inválida. \nInforme uma placa no padrão antigo (ex: ABC-1234) ou \nMercosul (ex: ABC1D23) sem caracteres extras."
+            message = "A placa informada é inválida. Informe uma placa no padrão antigo (ex: ABC-1234) ou Mercosul (ex: ABC1D23) sem caracteres extras."
     )
     @Column(name = "placa", nullable = false, unique = true, length = 10)
     private String placa;
 
+    @NotBlank(message = "O modelo é obrigatório.")
     @Column(name = "modelo", length = 50)
     private String modelo;
 
@@ -46,7 +47,7 @@ public class Carro {
 
     @Column(name = "elegivel_vaga_idoso",
             nullable = false)
-    private boolean elegivelVagaIdoso = false;
+    private Boolean elegivelVagaIdoso = false;
 
 
     @PrePersist
