@@ -13,7 +13,6 @@ public interface VagaRepository extends JpaRepository<Vaga, Integer> {
     List<Vaga> findByEstacionamento_IdEstacionamento(Integer idEstacionamento,
                                                                Pageable pageable);
 
-
     List<Vaga> findByEstacionamento_IdEstacionamentoAndTipoVaga(Integer idEstacionamento,
                                                                 TipoVaga tipoVaga,
                                                                 Pageable pageable);
