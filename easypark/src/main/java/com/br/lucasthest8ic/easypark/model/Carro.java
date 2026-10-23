@@ -1,5 +1,6 @@
 package com.br.lucasthest8ic.easypark.model;
 
+import com.br.lucasthest8ic.easypark.util.PlacaUtil;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -30,16 +31,16 @@ public class Carro {
     private Integer idCarro;
 
 
-    @NotBlank(message = "A placa não pode ser vazia")
+    @NotBlank(message = "A placa é obrigatória")
     @Pattern(
-            regexp = "^[A-Z]{3}-?([0-9]{4}|[0-9][A-Z][0-9]{2})$",
+            regexp = PlacaUtil.REGEX_PLACA,
             message = "A placa informada é inválida. Informe uma placa no padrão antigo (ex: ABC-1234) ou Mercosul (ex: ABC1D23) sem caracteres extras."
     )
     @Column(name = "placa", nullable = false, unique = true, length = 10)
     private String placa;
 
     @NotBlank(message = "O modelo é obrigatório.")
-    @Column(name = "modelo", length = 50)
+    @Column(name = "modelo", nullable = false, length = 50)
     private String modelo;
 
     @Column(name = "cor", length = 30)
@@ -53,8 +54,6 @@ public class Carro {
     @PrePersist
     @PreUpdate
     public void padronizarPlaca() {
-        if (this.placa != null) {
-            this.placa = this.placa.toUpperCase().replace("-", "").trim();
-        }
+        this.placa = PlacaUtil.normalizePlaca(this.placa);
     }
 }
