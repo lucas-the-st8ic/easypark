@@ -29,6 +29,7 @@ O **EasyPark** gerencia múltiplos estacionamentos (pátios), cada um com vagas 
 | **Spring Boot 4.1.1** | Framework base da aplicação |
 | **Spring Web MVC** | Camada REST (`spring-boot-starter-webmvc`) |
 | **Spring Data JPA** | Abstração de persistência de dados |
+| **Bean Validation** | Validação por anotações (`spring-boot-starter-validation`) |
 | **Hibernate 7** | ORM / Provedor JPA |
 | **PostgreSQL** | Banco de dados relacional |
 | **Lombok** | Redução de código boilerplate (`@Getter`, `@Setter`, `@RequiredArgsConstructor`, etc.) |
@@ -45,11 +46,11 @@ O **EasyPark** gerencia múltiplos estacionamentos (pátios), cada um com vagas 
 | **Banco de Dados (PostgreSQL)** | ✅ Conectado | Tabelas criadas e atualizadas automaticamente via Hibernate |
 | **Repositories** | ✅ Concluída (4/4) | Spring Data JPA interfaces com Query Methods criadas |
 | **Dependência Web (Spring MVC)** | ✅ Concluída | `spring-boot-starter-webmvc` e starter de teste no `pom.xml` |
-| **DTOs** | 🟡 Em andamento | `Carro` concluído (`CarroRequestDTO`, `CarroDTO`); demais entidades pendentes |
+| **DTOs** | 🟡 Em andamento | `Carro` concluído (`CarroRequestDTO` com validação, `CarroDTO` de resposta); demais entidades pendentes |
 | **Service (Regras de Negócio)** | 🟡 Em andamento | `CarroService` concluído; `EstacionamentoService` e `EstadiaService` pendentes |
 | **Controller (Endpoints REST)** | 🟡 Em andamento | `CarroController` com `GET` e `POST`; demais controllers pendentes |
-| **Tratamento Global de Exceções** | 🟡 Parcial | `@RestControllerAdvice` com 4 handlers (404, 409, 400 e 409 de integridade) |
-| **Validações (Bean Validation)** | ⬜ Não iniciada | Anotações `@NotBlank`, `@Pattern`, `@Size` |
+| **Tratamento Global de Exceções** | 🟡 Parcial | `@RestControllerAdvice` com 6 handlers; falta o de `MethodArgumentNotValidException` |
+| **Validações (Bean Validation)** | 🟡 Em andamento | Ativa no DTO (`@Valid`) e na entidade `Carro`; `PlacaUtil` centraliza a regex e a normalização da placa |
 | **Testes Unitários / Integração** | ⬜ Não iniciada | Apenas o `contextLoads` gerado pelo Spring Initializr existe |
 
 ---
@@ -63,8 +64,9 @@ com.br.lucasthest8ic.easypark/
 ├── repository/      ✅ CarroRepository, EstacionamentoRepository, VagaRepository, EstadiaRepository
 ├── model/           ✅ Carro, Estacionamento, Vaga, Estadia
 ├── enums/           ✅ TipoVaga
+├── util/            ✅ PlacaUtil (regex e normalização da placa)
 ├── dtos/
-│   └── carrodto/    ✅ CarroRequestDTO (entrada), CarroDTO (resposta)
+│   └── carrodtos/   ✅ CarroRequestDTO (entrada), CarroDTO (resposta)
 └── exception/
     ├── ApiError                  ✅ corpo padrão das respostas de erro
     ├── GlobalExceptionHandler    ✅ @RestControllerAdvice
@@ -73,10 +75,11 @@ com.br.lucasthest8ic.easypark/
 
 **Responsabilidade de cada camada**
 
-- **Controller:** recebe a requisição, delega ao Service e devolve a resposta. Não contém regra de negócio, não usa `try/catch` e nunca expõe entidades.
+- **Controller:** recebe a requisição, aciona a validação do DTO (`@Valid`), delega ao Service e devolve a resposta. Não contém regra de negócio, não usa `try/catch` e nunca expõe entidades.
 - **Service:** guarda as regras de negócio, controla as transações (`@Transactional`) e lança exceções de negócio. Converte entidade em DTO.
 - **Repository:** acesso a dados, via Query Methods do Spring Data.
-- **Exception handler:** traduz as exceções do Service em respostas HTTP padronizadas.
+- **Util:** funções puras e constantes reutilizáveis (hoje, a regra da placa), sem estado e sem dependência do Spring.
+- **Exception handler:** traduz exceções em respostas HTTP padronizadas.
 
 ---
 
@@ -95,14 +98,14 @@ Prefixo de todas as rotas: `/easypark` (definido no `@RequestMapping` do control
 
 ```json
 {
-  "placa": "abc1234",
+  "placa": "abc-1234",
   "modelo": "Gol",
   "cor": "Prata",
   "elegivelVagaIdoso": false
 }
 ```
 
-Resposta (`201 Created`). A placa é normalizada (sem espaços nas pontas e em maiúsculas):
+Resposta (`201 Created`). A placa é normalizada (maiúsculas, sem hífen e sem espaços):
 
 ```json
 {
@@ -113,15 +116,26 @@ Resposta (`201 Created`). A placa é normalizada (sem espaços nas pontas e em m
 }
 ```
 
+### Regras de validação
+
+| Campo | Regra | Onde é verificada |
+|---|---|---|
+| `placa` | Obrigatória. Padrão antigo (`ABC-1234`) ou Mercosul (`ABC1D23`); hífen opcional; maiúsculas ou minúsculas; sem espaços | DTO (`@Valid`) e entidade |
+| `modelo` | Obrigatório, até 50 caracteres | Entidade (no commit) |
+| `cor` | Opcional, até 30 caracteres | Banco (tamanho) |
+| `elegivelVagaIdoso` | Opcional; se ausente, vira `false` | Construtor compacto do DTO |
+
+A normalização (`PlacaUtil.normalizePlaca`) é usada pelo `CarroService` e pelo callback `@PrePersist` da entidade, então `abc-1234` e `ABC1234` são sempre a mesma placa.
+
 ### Respostas de erro
 
-Todos os erros seguem o mesmo formato (`ApiError`):
+Os erros tratados pelo handler seguem o formato `ApiError`:
 
 ```json
 {
   "status": 404,
   "message": "Não foi possível encontrar o carro com a placa ZZZ9999",
-  "timestamp": "2026-10-21T14:30:00.000"
+  "timestamp": "2026-10-22T14:30:00.000"
 }
 ```
 
@@ -129,19 +143,28 @@ Todos os erros seguem o mesmo formato (`ApiError`):
 |---|---|---|
 | `ResourceNotFoundException` | Carro não encontrado pela placa | `404 Not Found` |
 | `ResourceAlreadyExistsException` | Cadastro de placa que já existe | `409 Conflict` |
-| `CantBeNullOrBlankException` | Placa nula, vazia ou só com espaços | `400 Bad Request` |
 | `DataIntegrityViolationException` | Violação de unicidade no banco (ex.: duas requisições simultâneas com a mesma placa nova) | `409 Conflict` |
+| `ConstraintViolationException` | Falha de validação da entidade (ex.: modelo ausente) | `400 Bad Request` |
+| `TransactionSystemException` | Falha no commit; se a causa raiz for `ConstraintViolationException`, devolve 400, senão 500 | `400` ou `500` |
+| `CantBeNullOrBlankException` | Handler existe, mas hoje nada a lança (a validação passou para o Bean Validation) | `400 Bad Request` |
+| `MethodArgumentNotValidException` | Falha de validação do DTO (`@Valid`). **Ainda sem handler**: a resposta sai no formato padrão do Spring, não no `ApiError` | `400 Bad Request` |
 
 > A mensagem do `DataIntegrityViolationException` é fixa de propósito: o texto original traz detalhes técnicos do banco (SQL, nome da constraint) que não devem ir para o cliente.
 
 ### Roteiro de testes manuais (Postman / Insomnia)
 
+Resultados previstos pela leitura do código; confirme cada um e marque.
+
 - [ ] `POST /easypark/carros` com placa `abc1234` → `201`, placa devolvida como `ABC1234`
 - [ ] O mesmo `POST` novamente → `409`
-- [ ] `POST` com `" abc1234 "` (espaços) → `409`
-- [ ] `POST` com `"placa": ""` → `400`
-- [ ] `POST` sem o campo `placa` → `400`
+- [ ] `POST` com placa `abc-1234` (com `ABC1234` já cadastrada) → `409`
+- [ ] `POST` com `" abc1234 "` (espaços nas pontas) → `400` (formato padrão do Spring)
+- [ ] `POST` com `"placa": ""` ou sem o campo `placa` → `400` (formato padrão do Spring)
+- [ ] `POST` com placa `ABC 1234` (espaço no meio) → `400` (formato padrão do Spring)
+- [ ] `POST` sem o campo `modelo` → `400`, `"O modelo é obrigatório."` (`ApiError`)
+- [ ] `POST` sem `elegivelVagaIdoso` → `201`, valor `false`
 - [ ] `GET /easypark/carros/abc1234` → `200`
+- [ ] `GET /easypark/carros/ABC-1234` (com `ABC1234` cadastrada) → `200`
 - [ ] `GET /easypark/carros/ZZZ9999` → `404`
 - [ ] `POST` com JSON malformado → `400` (tratado pelo próprio Spring)
 - [ ] Conferir no pgAdmin se `modelo` e `cor` caíram nas colunas corretas
@@ -171,9 +194,12 @@ A modelagem do domínio foi construída questionando continuamente se cada infor
 - **`TipoVaga` como Enum:** Enum simples (`COMUM`, `IDOSO`, `PCD`), persistido no banco como `EnumType.STRING`.
 
 ### 4. Camada de Serviço e API
-- **DTOs como `record`:** Entrada (`CarroRequestDTO`) e saída (`CarroDTO`) são separados e imutáveis. O Service devolve DTO, nunca a entidade, o que evita expor o modelo de persistência e o `LazyInitializationException`.
-- **Normalização da placa em um único lugar:** O método privado `normalizePlaca` do `CarroService` rejeita placa nula ou em branco e aplica `trim` + `toUpperCase`. Todo método público passa por ele, para que `abc1234` e `ABC1234` nunca virem dois carros.
-- **Conversão entidade → DTO centralizada:** O método privado `toDTO` é o único lugar que conhece a ordem dos componentes do `CarroDTO`.
+- **DTOs como `record`:** Entrada (`CarroRequestDTO`) e saída (`CarroDTO`) são separados e imutáveis. O Service devolve DTO, nunca a entidade, o que evita expor o modelo de persistência e o `LazyInitializationException`. A validação fica só no DTO de **entrada**.
+- **Construtor compacto no `CarroRequestDTO`:** troca `elegivelVagaIdoso` ausente (`null`) por `false`. Por isso o campo é `Boolean` (objeto) e não `boolean`.
+- **Normalização da placa em um único lugar (`PlacaUtil`):** função pura e estática que passa para maiúsculas e remove hífen e espaços. É chamada pelo `CarroService` e pelo callback `@PrePersist` da entidade, para que `abc-1234` e `ABC1234` nunca virem dois carros.
+- **Regex da placa como constante (`PlacaUtil.REGEX_PLACA`):** reutilizada nas anotações do DTO e da entidade, sem divergência. Aceita maiúsculas e minúsculas, com hífen opcional.
+- **Validação em camadas:** `@Valid` no DTO (falha cedo, antes do service), Bean Validation na entidade (rede de segurança, no commit) e constraints do banco (`NOT NULL`, `UNIQUE`).
+- **Conversão entidade → DTO centralizada:** o método privado `toDTO` é o único lugar que conhece a ordem dos componentes do `CarroDTO`.
 - **Transações:** leitura com `@Transactional(readOnly = true)`, escrita com `@Transactional`.
 - **Exceções de negócio com significado único:** cada exceção representa um tipo de erro e o handler global a mapeia para um status HTTP, sem duplicar essa lógica nos controllers.
 - **Verificação de duplicidade com `existsByPlaca`:** evita carregar a entidade inteira só para saber se ela existe. A garantia final contra concorrência é o `unique = true` da coluna.
@@ -186,10 +212,10 @@ A modelagem do domínio foi construída questionando continuamente se cada infor
 | Campo | Tipo JPA / Java | Configuração JPA / Observação |
 |---|---|---|
 | `idCarro` | `Integer` | `@Id`, Sequence |
-| `placa` | `String` | `@Column(unique = true, nullable = false, length = 10)` |
-| `modelo` | `String` | `@Column(length = 50)` |
+| `placa` | `String` | `@Column(unique = true, nullable = false, length = 10)`; `@NotBlank` e `@Pattern(PlacaUtil.REGEX_PLACA)`; padronizada por `@PrePersist`/`@PreUpdate` |
+| `modelo` | `String` | `@Column(nullable = false, length = 50)`; `@NotBlank` |
 | `cor` | `String` | `@Column(length = 30)` |
-| `elegivelVagaIdoso` | `boolean` | `nullable = false`; dado de origem (não derivável) |
+| `elegivelVagaIdoso` | `Boolean` | `nullable = false`, padrão `false`; dado de origem (não derivável) |
 
 ### `Estacionamento` (`estacionamentos`)
 | Campo | Tipo JPA / Java | Configuração JPA / Observação |
@@ -251,8 +277,10 @@ List<Vaga> findByEstacionamento_IdEstacionamentoAndTipoVaga(Integer idEstacionam
 - [x] `CarroService`: `findCarroByPlaca` e `register`.
 - [x] `CarroController`: `GET /carros/{placa}` e `POST /carros`.
 - [x] `GlobalExceptionHandler` e `ApiError`.
+- [x] `PlacaUtil` como fonte única da normalização e da regex da placa.
+- [x] `@Valid` no `POST` e Bean Validation na entidade.
 - [ ] Executar o roteiro de testes manuais (seção **API**).
-- [ ] Teste unitário do `CarroService` com JUnit 5 e Mockito (placa em minúsculas, placa nula, placa duplicada, carro não encontrado).
+- [ ] Testes unitários: `PlacaUtil` (função pura) e `CarroService` com JUnit 5 e Mockito (placa em minúsculas, com hífen, duplicada, carro não encontrado).
 
 ### Fase 3 — Módulo Estacionamento e Vagas
 - [ ] **Inicializar a lista `vagas` em `Estacionamento`** (hoje o campo nasce `null` e causaria `NullPointerException` ao montar o pátio).
@@ -280,9 +308,15 @@ List<Vaga> findByEstacionamento_IdEstacionamentoAndTipoVaga(Integer idEstacionam
   - `GET /easypark/estacionamentos/{id}/historico` — histórico completo de estadias.
 
 ### Fase 5 — Validações e Tratamento de Exceções
-- [ ] Aplicar Bean Validation (`@NotBlank`, `@Size`, `@Pattern` para placas no padrão antigo e Mercosul) nos DTOs, incluindo os limites das colunas (placa até 10, modelo até 50, cor até 30).
+- [x] Bean Validation na placa (padrão antigo e Mercosul) e no modelo, no módulo Carro.
+- [ ] Handler de `MethodArgumentNotValidException` devolvendo `ApiError` (idealmente listando os campos inválidos).
+- [ ] Juntar todas as mensagens no handler de `ConstraintViolationException` (hoje devolve só a primeira).
+- [ ] `@NotBlank` no `modelo` do DTO, para o erro aparecer cedo e pelo mesmo caminho dos demais.
+- [ ] Definir a política de espaços na placa (o DTO recusa espaços nas pontas, o `PlacaUtil` remove todos).
+- [ ] Remover ou reaproveitar a `CantBeNullOrBlankException` (hoje sem uso) e o import sobrando no `PlacaUtil`.
+- [ ] Bean Validation (`@Size`, `@NotBlank`) nos DTOs dos demais módulos.
 - [ ] Criar exceções de negócio específicas quando necessário (ex.: `VagaOcupadaException`, `VeiculoNaoElegivelException`, `EstadiaAtivaExistenteException`) e mapeá-las no `GlobalExceptionHandler`.
-- [ ] Tratar `MethodArgumentNotValidException` (Bean Validation) e JSON malformado de forma padronizada.
+- [ ] Padronizar o corpo de erro para JSON malformado.
 - [ ] Avaliar um handler genérico de `Exception` (500) só depois de tratar os casos que o Spring já resolve bem.
 
 ### Fase 6 — Melhorias e Evoluções Futuras
@@ -319,6 +353,13 @@ ALTER TABLE public.estacionamentos
 ```
 
 Em um banco novo (criado do zero), nada precisa ser feito.
+
+O mesmo vale para **restrições**: o `modelo` passou a ser `nullable = false`, mas em um banco que já tinha a tabela `carros` a coluna continua aceitando nulo. Para alinhar (só se nenhuma linha tiver `modelo` nulo):
+
+```sql
+ALTER TABLE public.carros
+    ALTER COLUMN modelo SET NOT NULL;
+```
 
 ---
 
