@@ -1,7 +1,5 @@
 package com.br.lucasthest8ic.easypark.util;
 
-import org.springframework.data.repository.query.Param;
-
 public final class PlacaUtil {
 
     public static final String REGEX_PLACA = "^[a-zA-Z]{3}-?([0-9]{4}|[0-9][a-zA-Z][0-9]{2})$";
